@@ -1,34 +1,104 @@
- <?php
+<?php
 
-if($_FILES)
-{
-	$filename=$_FILES['input']['name'];
-	echo  "File_name :".$filename;
-}
+	function Decrypt($data, $secret)
+	{
+		//Generate a key from a hash
+		$key = md5(utf8_encode($secret), true);
 
-	$newfilename="downloadnewfile.txt";
-	$salt="abcd";
-	$myfile = fopen($filename,"r") or die("Unable to open file!");
-	$enc_file=fopen($newfilename,"w") or die("Unable to open file!");
+		//Take first 8 bytes of $key and append them to the end of $key.
+		$key .= substr($key, 0, 8);
 
-	echo "</br>";
-	while(!feof($myfile))
+		$data = base64_decode($data);
+
+		$data = mcrypt_decrypt('tripledes', $key, $data, 'ecb');
+
+		$block = mcrypt_get_block_size('tripledes', 'ecb');
+		$len = strlen($data);
+		$pad = ord($data[$len-1]);
+
+		return substr($data, 0, strlen($data) - $pad);
+	}
+
+	 if(isset($_POST['submit_download']))
+	{
+		$key = $_POST['key'];
+		if($_FILES["file"]["error"] > 0)
+			echo "Error: ".$_FILES["file"]["error"]."<br>";
+		else
 		{
+			move_uploaded_file($_FILES["file"]["tmp_name"], "Temp/".$_FILES["file"]["name"]);
+	
+			$filename = "Temp/".$_FILES["file"]["name"];
+			$handle = fopen($filename, "r");
+			//echo filesize($filename);
+			$content = fread($handle, filesize($filename));
 			
+			$DecryptedData=Decrypt($content, $key);
 			
-			$cipher=MCRYPT_DES;
-			$key="abcdefgh";
-			$data=fgets($myfile);
-			$mode='ecb';
-			echo $data."</br>";
-			$encrypted=mcrypt_decrypt($cipher,$key,$data,$mode);
-			fwrite($enc_file,$encrypted);
-			echo $encrypted . "<br>";
+			$handle = fopen($filename, "w");
+			fwrite($handle, $DecryptedData);
+			fclose($handle);
+			echo '<a href="/CASS/'.$filename.'" download> Click Here to download the file </a><br>';
+			echo "<hr>";
+			echo "<br><br>";
+			//echo '<a href="index.html" onclick="'.unlink($filename).'" >Go Back to the Index.html page</a><br>';
+					  
+			//unlink($filename);
+		
 		}
-	fclose($myfile);
-	fclose($enc_file);
+	}
+	
+	function Encrypt($data, $secret)
+	{    
+	  //Generate a key from a hash
+	  $key = md5(utf8_encode($secret), true);
 
-			rename($newfilename,$_FILES["input"]["tmp_name"]);
-			move_uploaded_file($_FILES["input"]["tmp_name"],"../Downloads/".$_FILES["input"]["name"]);
-			echo "File Sucessfully downloaded to clients folder";
-?> 
+	  //Take first 8 bytes of $key and append them to the end of $key.
+	  $key .= substr($key, 0, 8);
+
+	  //Pad for PKCS7
+	  $blockSize = mcrypt_get_block_size('tripledes', 'ecb');
+	  $len = strlen($data);
+	  $pad = $blockSize - ($len % $blockSize);
+	  $data .= str_repeat(chr($pad), $pad);
+
+	  //Encrypt data
+	  $encData = mcrypt_encrypt('tripledes', $key, $data, 'ecb');
+
+	  return base64_encode($encData);
+	}
+
+	if(isset($_POST['submit_upload']))
+	{
+		$key = $_POST['key'];
+		if($_FILES["file"]["error"] > 0)
+			echo "Error in uploading file: ".$_FILES["file"]["error"]."<br>";
+		else
+		{
+			$filename = $_FILES["file"]["name"];
+			$handle = fopen($filename, "r");
+			$content = fread($handle, filesize($filename));
+			$EncryptedData=Encrypt($content, $key);
+			
+			echo "Encrypting and Uploading the File..."."<br>";
+			
+			move_uploaded_file($_FILES["file"]["tmp_name"], "ServerFiles/".$_FILES["file"]["name"]);
+			$filename = "ServerFiles/".$_FILES["file"]["name"];
+			$handle = fopen($filename, "w");
+			fwrite($handle, $EncryptedData);
+			
+			echo "File Uploaded!!"."<br>";
+			echo "<hr>";
+			
+		}
+	}	
+
+?>
+
+<html>
+	<head>
+		<title>Server</title>
+	</head>
+	<body>				
+	</body>
+</html>
